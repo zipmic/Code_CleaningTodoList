@@ -375,7 +375,6 @@ export default function App() {
           type="file"
           accept="image/*"
           capture="environment"
-          multiple
           onChange={handleFileChange}
           style={{ display: 'none' }}
           aria-hidden="true"
