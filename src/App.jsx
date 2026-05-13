@@ -4,32 +4,49 @@ import TimerBar from './components/TimerBar'
 import VictoryModal from './components/VictoryModal'
 import './App.css'
 
-const STORAGE_KEY = 'cleanup-quest-v1'
+// Bumped key — schema now includes mode + timestamps
+const STORAGE_KEY = 'cleanup-quest-v2'
 
-// Resize an image file to max 800px and return a compressed data URL.
-// This keeps localStorage usage manageable (~50–150 KB per photo).
-function resizeImage(file, maxPx = 800) {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        let { width, height } = img
-        if (width > height) {
-          if (width > maxPx) { height = Math.round((height * maxPx) / width); width = maxPx }
-        } else {
-          if (height > maxPx) { width = Math.round((width * maxPx) / height); height = maxPx }
-        }
-        const canvas = document.createElement('canvas')
-        canvas.width = width
-        canvas.height = height
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', 0.72))
+// Resize an image to ≤ maxPx on its longest edge and return a JPEG data URL.
+// Uses createImageBitmap with { imageOrientation: 'from-image' } so EXIF
+// rotation from phone cameras is applied (otherwise portrait photos render
+// sideways after canvas re-encoding). Falls back to FileReader + <img> on
+// browsers that don't support the option.
+async function resizeImage(file, maxPx = 800) {
+  let source, width, height, isBitmap = false
+  try {
+    source = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    width = source.width
+    height = source.height
+    isBitmap = true
+  } catch {
+    source = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = () => reject(new Error('image decode failed'))
+        img.src = e.target.result
       }
-      img.src = e.target.result
-    }
-    reader.readAsDataURL(file)
-  })
+      reader.onerror = () => reject(new Error('file read failed'))
+      reader.readAsDataURL(file)
+    })
+    width = source.naturalWidth
+    height = source.naturalHeight
+  }
+
+  if (width > height) {
+    if (width > maxPx) { height = Math.round((height * maxPx) / width); width = maxPx }
+  } else {
+    if (height > maxPx) { width = Math.round((width * maxPx) / height); height = maxPx }
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  canvas.getContext('2d').drawImage(source, 0, 0, width, height)
+  if (isBitmap) source.close()
+  return canvas.toDataURL('image/jpeg', 0.72)
 }
 
 function loadState() {
@@ -42,72 +59,109 @@ function loadState() {
   }
 }
 
-function saveState(tasks) {
+function saveState(state) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
-    // localStorage may be full if many large photos are added.
-    // Images survive the session but won't persist across refresh.
-    console.warn('localStorage full — photos will not survive a page refresh.')
+    console.warn('localStorage full — state may not survive a refresh.')
   }
 }
 
 export default function App() {
-  const [tasks, setTasks] = useState(() => loadState() || [])
-  // mode: 'setup' | 'cleanup' | 'complete'
-  const [mode, setMode] = useState('setup')
+  // All four pieces of state are rehydrated from localStorage so a refresh
+  // in the middle of cleanup mode keeps photos, completion state, and the
+  // running stopwatch.
+  const [tasks, setTasks] = useState(() => loadState()?.tasks || [])
+  const [mode, setMode] = useState(() => loadState()?.mode || 'setup')
+  // Wall-clock timestamps (ms). Using these instead of an incrementing
+  // counter means the stopwatch stays accurate across tab-throttling and
+  // page refreshes, and naturally handles the "complete" state by freezing
+  // endTime at the moment of completion.
+  const [startTime, setStartTime] = useState(() => loadState()?.startTime ?? null)
+  const [endTime, setEndTime] = useState(() => loadState()?.endTime ?? null)
   const [elapsed, setElapsed] = useState(0)
+
   const timerRef = useRef(null)
+  const completionTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Persist tasks whenever they change
-  useEffect(() => { saveState(tasks) }, [tasks])
-
-  // Tick the stopwatch while in cleanup mode
+  // Persist whenever any tracked state changes
   useEffect(() => {
+    saveState({ tasks, mode, startTime, endTime })
+  }, [tasks, mode, startTime, endTime])
+
+  // Derive elapsed from wall-clock timestamps. While in cleanup mode we
+  // re-read Date.now() on a 250 ms tick; in complete mode the value is
+  // frozen at endTime.
+  useEffect(() => {
+    if (!startTime) { setElapsed(0); return }
+    const tick = () => {
+      const end = endTime ?? Date.now()
+      setElapsed(Math.max(0, Math.floor((end - startTime) / 1000)))
+    }
+    tick()
     if (mode === 'cleanup') {
-      timerRef.current = setInterval(() => setElapsed(s => s + 1), 1000)
+      timerRef.current = setInterval(tick, 250)
     }
     return () => clearInterval(timerRef.current)
-  }, [mode])
+  }, [mode, startTime, endTime])
 
-  // Auto-complete once every task is done
+  // Auto-complete once every task is done. The 600 ms delay lets the final
+  // emoji burst finish before the modal appears. The cleanup function
+  // cancels the pending transition if the user un-marks a task during that
+  // window — otherwise un-marking right before the timer fires would still
+  // pop the victory modal.
   useEffect(() => {
-    if (mode === 'cleanup' && tasks.length > 0 && tasks.every(t => t.completed)) {
-      clearInterval(timerRef.current)
-      // Small delay so the last emoji burst is visible before modal appears
-      setTimeout(() => setMode('complete'), 600)
-    }
+    if (mode !== 'cleanup') return
+    if (tasks.length === 0) return
+    if (!tasks.every(t => t.completed)) return
+    completionTimeoutRef.current = setTimeout(() => {
+      setEndTime(Date.now())
+      setMode('complete')
+    }, 600)
+    return () => clearTimeout(completionTimeoutRef.current)
   }, [tasks, mode])
 
   const handleFileChange = useCallback(async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
     for (const file of files) {
-      const dataUrl = await resizeImage(file)
-      setTasks(prev => [
-        ...prev,
-        { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, dataUrl, completed: false },
-      ])
+      try {
+        const dataUrl = await resizeImage(file)
+        setTasks(prev => [
+          ...prev,
+          { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, dataUrl, completed: false },
+        ])
+      } catch (err) {
+        // Skip files we can't decode (HEIC on some browsers, corrupt files, etc.)
+        console.warn('Skipping unreadable image:', err)
+      }
     }
-    // Reset so the same file can be added again
     e.target.value = ''
   }, [])
 
   const handleToggle = useCallback((id) => {
+    // Tasks are only interactive once the user has tapped Ready. Without
+    // this guard a user could pre-complete every task in setup mode and
+    // then trigger an instant 0:00 victory by tapping Ready.
+    if (mode !== 'cleanup') return
     setTasks(prev =>
       prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     )
-  }, [])
+  }, [mode])
 
   const handleReady = useCallback(() => {
-    setElapsed(0)
+    setStartTime(Date.now())
+    setEndTime(null)
     setMode('cleanup')
   }, [])
 
   const handleReset = useCallback(() => {
     clearInterval(timerRef.current)
+    clearTimeout(completionTimeoutRef.current)
     setTasks([])
+    setStartTime(null)
+    setEndTime(null)
     setElapsed(0)
     setMode('setup')
     localStorage.removeItem(STORAGE_KEY)
@@ -141,12 +195,12 @@ export default function App() {
                 key={task.id}
                 task={task}
                 onToggle={handleToggle}
+                interactive={mode === 'cleanup'}
               />
             ))}
           </div>
         )}
 
-        {/* Add-photo button — only visible in setup mode */}
         {mode === 'setup' && (
           <button
             className="add-photo-btn"
@@ -159,7 +213,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Hidden file input — capture="environment" opens the rear camera on mobile */}
       <input
         ref={fileInputRef}
         type="file"
