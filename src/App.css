@@ -1,0 +1,464 @@
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;        /* dvh handles mobile address-bar resize */
+  min-height: 100vh;         /* fallback */
+  padding-bottom: 90px;      /* space for the sticky TimerBar */
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-title {
+  font-size: clamp(1.35rem, 5vw, 1.75rem);
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  user-select: none;
+}
+
+.progress-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.3s, transform 0.2s;
+}
+
+.progress-badge--done {
+  background: #22c55e;
+  transform: scale(1.08);
+}
+
+/* ─── Task area ───────────────────────────────────────────────────────────── */
+
+.task-area {
+  flex: 1;
+  padding: 20px 16px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ─── Empty state ─────────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 300px;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 5rem;
+  animation: float 3s ease-in-out infinite;
+}
+
+.empty-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #581c87;
+}
+
+.empty-sub {
+  font-size: 0.95rem;
+  color: #9333ea;
+  opacity: 0.8;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+
+/* ─── Photo grid ──────────────────────────────────────────────────────────── */
+
+.task-grid {
+  display: grid;
+  /* Two columns on mobile, up to 4 on wide screens */
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 45vw), 1fr));
+  gap: 14px;
+}
+
+/* ─── Photo task card ─────────────────────────────────────────────────────── */
+
+.photo-task {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  /* Prevent text selection on rapid taps */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.photo-task:active {
+  transform: scale(0.94);
+}
+
+.photo-task:focus-visible {
+  outline: 3px solid #7c3aed;
+  outline-offset: 3px;
+}
+
+/* Pop-in animation when a card first appears */
+.photo-task {
+  animation: card-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes card-pop {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.photo-task__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.4s ease;
+}
+
+/* Desaturate the image when done */
+.photo-task--done .photo-task__img {
+  filter: grayscale(1) brightness(0.55);
+}
+
+/* Dark overlay + checkmark for completed tasks */
+.photo-task__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlay-in 0.3s ease both;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.photo-task__check {
+  font-size: clamp(2.5rem, 10vw, 4rem);
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+  animation: check-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes check-bounce {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+/* ─── Emoji burst ─────────────────────────────────────────────────────────── */
+
+.emoji-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.emoji-burst__particle {
+  position: absolute;
+  /* Start at card centre; CSS custom properties set the destination */
+  animation: burst-fly 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes burst-fly {
+  0%   { transform: translate(0, 0)                      scale(0.2); opacity: 1; }
+  60%  { transform: translate(var(--tx), var(--ty))      scale(1.1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty))      scale(0.8); opacity: 0; }
+}
+
+/* ─── Add photo button ────────────────────────────────────────────────────── */
+
+.add-photo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  align-self: center;
+  padding: 16px 36px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+  touch-action: manipulation;
+  margin-top: 4px;
+}
+
+.add-photo-btn:active {
+  transform: scale(0.95);
+  box-shadow: 0 3px 12px rgba(124, 58, 237, 0.35);
+}
+
+.add-photo-btn__icon {
+  font-size: 1.4rem;
+}
+
+/* ─── Timer bar (sticky bottom) ───────────────────────────────────────────── */
+
+.timer-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: #fff;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ready button */
+.ready-btn {
+  width: 100%;
+  max-width: 480px;
+  padding: 18px 24px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #fff;
+  background: #d1d5db;
+  border: none;
+  border-radius: 999px;
+  cursor: not-allowed;
+  transition: background 0.25s, transform 0.15s, box-shadow 0.25s;
+  touch-action: manipulation;
+}
+
+.ready-btn--active {
+  background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+  box-shadow: 0 6px 24px rgba(34, 197, 94, 0.45);
+  cursor: pointer;
+  animation: pulse-ready 2s ease-in-out infinite;
+}
+
+.ready-btn--active:active {
+  transform: scale(0.96);
+  animation: none;
+}
+
+@keyframes pulse-ready {
+  0%, 100% { box-shadow: 0 6px 24px rgba(34, 197, 94, 0.45); }
+  50%       { box-shadow: 0 6px 36px rgba(34, 197, 94, 0.7); }
+}
+
+/* Stopwatch */
+.stopwatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.stopwatch__label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: 0.5px;
+}
+
+.stopwatch__time {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1e1b4b;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+/* ─── Victory modal ───────────────────────────────────────────────────────── */
+
+.victory-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 10, 40, 0.75);
+  backdrop-filter: blur(4px);
+  animation: fade-in 0.3s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Confetti layer sits behind the modal card */
+.confetti-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -2em;
+  animation: confetti-fall linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes confetti-fall {
+  0%   { transform: translateY(-5vh) rotate(0deg);   opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+}
+
+/* Modal card */
+.victory-card {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  border-radius: 28px;
+  padding: 40px 32px 36px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+  animation: card-rise 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes card-rise {
+  from { transform: scale(0.6) translateY(40px); opacity: 0; }
+  to   { transform: scale(1)   translateY(0);    opacity: 1; }
+}
+
+.victory-trophy {
+  font-size: 5rem;
+  line-height: 1;
+  margin-bottom: 12px;
+  animation: trophy-spin 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+}
+
+@keyframes trophy-spin {
+  from { transform: scale(0) rotate(-30deg); }
+  to   { transform: scale(1) rotate(0deg); }
+}
+
+.victory-title {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: #1e1b4b;
+  margin-bottom: 6px;
+}
+
+.victory-sub {
+  font-size: 1rem;
+  color: #7c3aed;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+
+.victory-time-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #f3e8ff;
+  border-radius: 16px;
+  padding: 16px 24px;
+  margin-bottom: 28px;
+}
+
+.victory-time-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #7c3aed;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.victory-time {
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #1e1b4b;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+}
+
+.victory-reset-btn {
+  width: 100%;
+  padding: 17px 24px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+  touch-action: manipulation;
+}
+
+.victory-reset-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
+}
+
+/* ─── Desktop tweaks ──────────────────────────────────────────────────────── */
+
+@media (min-width: 600px) {
+  .task-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 18px;
+  }
+
+  .app-header {
+    padding: 20px 32px 16px;
+  }
+
+  .task-area {
+    padding: 28px 32px 16px;
+    max-width: 960px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .timer-bar {
+    border-radius: 0;
+    border-top: 1px solid #e9d5ff;
+  }
+}
