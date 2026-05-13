@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo } from 'react'
 import EmojiBurst from './EmojiBurst'
 
-export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
+// PhotoTask re-renders 4×/sec during cleanup because the parent ticks the
+// stopwatch. memo() short-circuits since props (task, callbacks) are stable.
+function PhotoTask({ task, onToggle, onDelete, interactive, mode }) {
   const [bursting, setBursting] = useState(false)
 
   const handleClick = useCallback(() => {
@@ -14,15 +16,22 @@ export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
   }, [interactive, task.completed, task.id, onToggle])
 
   const handleDelete = useCallback((e) => {
-    // Stop the click from bubbling to the card itself
     e.stopPropagation()
     onDelete(task.id)
   }, [task.id, onDelete])
+
+  // Pick a label that matches what tapping will actually do.
+  let label
+  if (mode === 'complete') label = 'Cleanup task — finished'
+  else if (!interactive)   label = 'Cleanup task — tap Ready to start'
+  else if (task.completed) label = 'Task done — tap to undo'
+  else                     label = 'Tap to mark as done'
 
   const classes = [
     'photo-task',
     task.completed && 'photo-task--done',
     !interactive && 'photo-task--locked',
+    bursting && 'photo-task--bursting',
   ].filter(Boolean).join(' ')
 
   return (
@@ -32,13 +41,7 @@ export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
       role={interactive ? 'button' : 'img'}
       tabIndex={interactive ? 0 : -1}
       aria-pressed={interactive ? task.completed : undefined}
-      aria-label={
-        !interactive
-          ? 'Cleanup task — tap Ready to start'
-          : task.completed
-            ? 'Task done — tap to undo'
-            : 'Tap to mark as done'
-      }
+      aria-label={label}
       onKeyDown={e => {
         if (!interactive) return
         if (e.key === 'Enter' || e.key === ' ') {
@@ -47,21 +50,23 @@ export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
         }
       }}
     >
-      <img
-        className="photo-task__img"
-        src={task.dataUrl}
-        alt=""
-        draggable={false}
-      />
+      {/* Inner box clips the image to the rounded shape. The outer
+          box stays overflow:visible so the emoji burst can fly outside
+          the card boundary. */}
+      <div className="photo-task__inner">
+        <img
+          className="photo-task__img"
+          src={task.dataUrl}
+          alt=""
+          draggable={false}
+        />
+        {task.completed && (
+          <div className="photo-task__overlay">
+            <span className="photo-task__check" aria-hidden="true">✅</span>
+          </div>
+        )}
+      </div>
 
-      {task.completed && (
-        <div className="photo-task__overlay">
-          <span className="photo-task__check" aria-hidden="true">✅</span>
-        </div>
-      )}
-
-      {/* Delete button is only rendered when a handler is supplied
-          (i.e. in setup mode) so it can't be hit during cleanup. */}
       {onDelete && (
         <button
           type="button"
@@ -77,3 +82,5 @@ export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
     </div>
   )
 }
+
+export default memo(PhotoTask)

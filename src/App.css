@@ -102,23 +102,18 @@
 
 /* ─── Photo task card ─────────────────────────────────────────────────────── */
 
+/* Outer wrapper: handles interaction + focus + emoji-burst overflow.
+   It is overflow:visible so burst particles can fly outside the card. */
 .photo-task {
   position: relative;
-  border-radius: 18px;
-  overflow: hidden;
   aspect-ratio: 1 / 1;
   cursor: pointer;
+  border-radius: 18px;
   outline: none;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.18);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  /* Prevent text selection on rapid taps */
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
-}
-
-.photo-task:active {
-  transform: scale(0.94);
+  transition: transform 0.15s ease;
 }
 
 .photo-task:focus-visible {
@@ -126,12 +121,35 @@
   outline-offset: 3px;
 }
 
+/* Inner wrapper: clips the image to the rounded shape and carries the
+   shadow. Separating these two roles is what lets emoji particles
+   escape the card while the image still has rounded corners. */
+.photo-task__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.photo-task:active .photo-task__inner {
+  transform: scale(0.94);
+}
+
+/* While a burst is in flight this card sits above its neighbours so
+   particles aren't visually overlapped by the next row of photos. */
+.photo-task--bursting {
+  z-index: 5;
+}
+
 /* In setup mode the cards are display-only — no tap feedback, no hand cursor */
 .photo-task--locked {
   cursor: default;
 }
 
-.photo-task--locked:active {
+.photo-task--locked:active .photo-task__inner {
   transform: none;
 }
 
@@ -358,6 +376,8 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
+  position: relative;
+  width: 100%;
 }
 
 .stopwatch__label {
@@ -373,6 +393,38 @@
   color: #1e1b4b;
   font-variant-numeric: tabular-nums;
   letter-spacing: 1px;
+}
+
+.stopwatch__cancel {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #e9d5ff;
+  background: #f3e8ff;
+  color: #7c3aed;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+  touch-action: manipulation;
+  padding: 0;
+}
+
+.stopwatch__cancel:hover,
+.stopwatch__cancel:focus-visible {
+  background: #e9d5ff;
+  outline: none;
+}
+
+.stopwatch__cancel:active {
+  transform: translateY(-50%) scale(0.9);
 }
 
 /* ─── Victory modal ───────────────────────────────────────────────────────── */

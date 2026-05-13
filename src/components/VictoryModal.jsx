@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
 import { formatTime } from '../utils/time'
 
 const CONFETTI_EMOJIS = ['🎉', '⭐', '✨', '🧹', '🏆', '🌟', '💫', '🎊']
@@ -20,6 +20,14 @@ function useConfetti(count = 36) {
 
 export default function VictoryModal({ elapsed, onReset }) {
   const confetti = useConfetti()
+  const resetBtnRef = useRef(null)
+
+  // M4: pull focus into the modal so keyboard/screen-reader users
+  // land on the only meaningful action (Reset). The `inert` attribute
+  // on the rest of the app (set in App.jsx) handles trapping focus.
+  useEffect(() => {
+    resetBtnRef.current?.focus()
+  }, [])
 
   return (
     <div className="victory-backdrop" role="dialog" aria-modal="true" aria-label="You finished!">
@@ -41,7 +49,6 @@ export default function VictoryModal({ elapsed, onReset }) {
         ))}
       </div>
 
-      {/* Modal card */}
       <div className="victory-card">
         <div className="victory-trophy" aria-hidden="true">🏆</div>
         <h2 className="victory-title">Good job!</h2>
@@ -50,7 +57,11 @@ export default function VictoryModal({ elapsed, onReset }) {
           <span className="victory-time-label">⏱ Finished in</span>
           <span className="victory-time">{formatTime(elapsed)}</span>
         </div>
-        <button className="victory-reset-btn" onClick={onReset}>
+        <button
+          ref={resetBtnRef}
+          className="victory-reset-btn"
+          onClick={onReset}
+        >
           🔄 Start Over
         </button>
       </div>

@@ -2,8 +2,8 @@ import { formatTime } from '../utils/time'
 
 // Sticky bar fixed to the bottom of the screen.
 // In setup mode: shows the "Ready?" button (disabled until photos are added).
-// In cleanup mode: shows the live stopwatch.
-export default function TimerBar({ mode, elapsed, taskCount, onReady }) {
+// In cleanup mode: shows the live stopwatch and a small cancel button.
+export default function TimerBar({ mode, elapsed, taskCount, onReady, onCancel }) {
   if (mode === 'complete') return null
 
   return (
@@ -21,6 +21,17 @@ export default function TimerBar({ mode, elapsed, taskCount, onReady }) {
         <div className="stopwatch" aria-live="polite" aria-atomic="true">
           <span className="stopwatch__label">⏱ Time</span>
           <span className="stopwatch__time">{formatTime(elapsed)}</span>
+          {/* M5: small escape hatch so a session started by mistake
+              (or an abandoned cleanup) isn't a dead end. */}
+          <button
+            type="button"
+            className="stopwatch__cancel"
+            onClick={onCancel}
+            aria-label="Cancel cleanup and start over"
+            title="Cancel cleanup"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>

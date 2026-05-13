@@ -8,7 +8,9 @@ export default function EmojiBurst() {
   const particles = useMemo(() => {
     return Array.from({ length: 8 }, (_, i) => {
       const angle = (i / 8) * 360 + Math.random() * 20 - 10
-      const distance = 60 + Math.random() * 50   // px
+      // Distance is now larger because particles can escape the card
+      // (the outer .photo-task is overflow:visible).
+      const distance = 90 + Math.random() * 60   // px
       const rad = (angle * Math.PI) / 180
       const tx = Math.round(Math.cos(rad) * distance)
       const ty = Math.round(Math.sin(rad) * distance)
