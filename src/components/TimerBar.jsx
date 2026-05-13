@@ -1,13 +1,4 @@
-// Formats elapsed seconds as mm:ss, or h:mm:ss when >= 1 hour.
-function formatTime(seconds) {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = seconds % 60
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  }
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
+import { formatTime } from '../utils/time'
 
 // Sticky bar fixed to the bottom of the screen.
 // In setup mode: shows the "Ready?" button (disabled until photos are added).

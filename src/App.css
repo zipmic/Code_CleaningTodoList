@@ -135,6 +135,67 @@
   transform: none;
 }
 
+/* ─── Delete button (setup mode only) ────────────────────────────────────── */
+
+.photo-task__delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 10, 40, 0.7);
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s, background 0.15s;
+  touch-action: manipulation;
+  padding: 0;
+  z-index: 2;
+}
+
+.photo-task__delete:hover,
+.photo-task__delete:focus-visible {
+  background: #dc2626;
+  outline: none;
+}
+
+.photo-task__delete:active {
+  transform: scale(0.88);
+}
+
+/* ─── Notice toast ───────────────────────────────────────────────────────── */
+
+.notice {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: #1e1b4b;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 12px 20px;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  max-width: calc(100% - 32px);
+  text-align: center;
+  animation: notice-in 0.25s ease-out both;
+}
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translate(-50%, -16px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 /* Pop-in animation when a card first appears */
 .photo-task {
   animation: card-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -345,7 +406,10 @@
 .confetti-piece {
   position: absolute;
   top: -2em;
-  animation: confetti-fall linear infinite;
+  /* `forwards` so each piece settles off-screen instead of looping; the
+     staggered delays keep new pieces appearing for a few seconds and then
+     the animation work stops entirely (no idle CPU on weaker phones). */
+  animation: confetti-fall linear forwards;
   will-change: transform, opacity;
 }
 

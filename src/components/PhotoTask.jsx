@@ -1,13 +1,10 @@
 import { useState, useCallback } from 'react'
 import EmojiBurst from './EmojiBurst'
 
-export default function PhotoTask({ task, onToggle, interactive }) {
+export default function PhotoTask({ task, onToggle, onDelete, interactive }) {
   const [bursting, setBursting] = useState(false)
 
   const handleClick = useCallback(() => {
-    // No-op in setup mode. App.handleToggle also guards against this,
-    // but bailing out here avoids triggering the burst animation on
-    // taps that won't change state.
     if (!interactive) return
     if (!task.completed) {
       setBursting(true)
@@ -15,6 +12,12 @@ export default function PhotoTask({ task, onToggle, interactive }) {
     }
     onToggle(task.id)
   }, [interactive, task.completed, task.id, onToggle])
+
+  const handleDelete = useCallback((e) => {
+    // Stop the click from bubbling to the card itself
+    e.stopPropagation()
+    onDelete(task.id)
+  }, [task.id, onDelete])
 
   const classes = [
     'photo-task',
@@ -55,6 +58,19 @@ export default function PhotoTask({ task, onToggle, interactive }) {
         <div className="photo-task__overlay">
           <span className="photo-task__check" aria-hidden="true">✅</span>
         </div>
+      )}
+
+      {/* Delete button is only rendered when a handler is supplied
+          (i.e. in setup mode) so it can't be hit during cleanup. */}
+      {onDelete && (
+        <button
+          type="button"
+          className="photo-task__delete"
+          onClick={handleDelete}
+          aria-label="Remove this photo"
+        >
+          ×
+        </button>
       )}
 
       {bursting && <EmojiBurst />}

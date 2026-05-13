@@ -4,7 +4,6 @@ import TimerBar from './components/TimerBar'
 import VictoryModal from './components/VictoryModal'
 import './App.css'
 
-// Bumped key — schema now includes mode + timestamps
 const STORAGE_KEY = 'cleanup-quest-v2'
 
 // Resize an image to ≤ maxPx on its longest edge and return a JPEG data URL.
@@ -53,42 +52,71 @@ function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    // If a previous save hit the quota and stripped image data, drop those
+    // tasks now so we don't render broken <img> tags.
+    if (parsed?.tasks) {
+      parsed.tasks = parsed.tasks.filter(t => t && t.dataUrl)
+    }
+    return parsed
   } catch {
     return null
   }
 }
 
+// Returns 'ok' | 'lite' | 'fail' so the caller can show a one-time warning
+// when we had to drop image data to stay under the localStorage quota.
 function saveState(state) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    return 'ok'
   } catch {
-    console.warn('localStorage full — state may not survive a refresh.')
+    // Quota exceeded. Retry without dataUrls so mode/timer state at least
+    // survives a refresh; tasks will reload empty and the user can re-add.
+    try {
+      const lite = {
+        ...state,
+        tasks: state.tasks.map(t => ({ id: t.id, completed: t.completed, dataUrl: null })),
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(lite))
+      return 'lite'
+    } catch {
+      return 'fail'
+    }
   }
 }
 
 export default function App() {
-  // All four pieces of state are rehydrated from localStorage so a refresh
-  // in the middle of cleanup mode keeps photos, completion state, and the
-  // running stopwatch.
   const [tasks, setTasks] = useState(() => loadState()?.tasks || [])
   const [mode, setMode] = useState(() => loadState()?.mode || 'setup')
-  // Wall-clock timestamps (ms). Using these instead of an incrementing
-  // counter means the stopwatch stays accurate across tab-throttling and
-  // page refreshes, and naturally handles the "complete" state by freezing
-  // endTime at the moment of completion.
   const [startTime, setStartTime] = useState(() => loadState()?.startTime ?? null)
   const [endTime, setEndTime] = useState(() => loadState()?.endTime ?? null)
   const [elapsed, setElapsed] = useState(0)
+  const [notice, setNotice] = useState(null)
 
   const timerRef = useRef(null)
   const completionTimeoutRef = useRef(null)
   const fileInputRef = useRef(null)
+  // Avoid re-warning on every keystroke once the user knows storage is full
+  const quotaWarnedRef = useRef(false)
 
-  // Persist whenever any tracked state changes
+  // Persist whenever any tracked state changes. If localStorage is too full
+  // for the photos, surface that to the user once so they know the photos
+  // won't survive a refresh.
   useEffect(() => {
-    saveState({ tasks, mode, startTime, endTime })
+    const result = saveState({ tasks, mode, startTime, endTime })
+    if (result !== 'ok' && !quotaWarnedRef.current) {
+      quotaWarnedRef.current = true
+      setNotice('Storage is full — photos may not survive a refresh.')
+    }
   }, [tasks, mode, startTime, endTime])
+
+  // Auto-dismiss any notice after a few seconds.
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
 
   // Derive elapsed from wall-clock timestamps. While in cleanup mode we
   // re-read Date.now() on a 250 ms tick; in complete mode the value is
@@ -109,8 +137,7 @@ export default function App() {
   // Auto-complete once every task is done. The 600 ms delay lets the final
   // emoji burst finish before the modal appears. The cleanup function
   // cancels the pending transition if the user un-marks a task during that
-  // window — otherwise un-marking right before the timer fires would still
-  // pop the victory modal.
+  // window.
   useEffect(() => {
     if (mode !== 'cleanup') return
     if (tasks.length === 0) return
@@ -125,6 +152,7 @@ export default function App() {
   const handleFileChange = useCallback(async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
+    let failed = 0
     for (const file of files) {
       try {
         const dataUrl = await resizeImage(file)
@@ -133,22 +161,29 @@ export default function App() {
           { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, dataUrl, completed: false },
         ])
       } catch (err) {
-        // Skip files we can't decode (HEIC on some browsers, corrupt files, etc.)
+        // HEIC on unsupported browsers, corrupt files, etc.
         console.warn('Skipping unreadable image:', err)
+        failed++
       }
+    }
+    if (failed > 0) {
+      setNotice(`Couldn't read ${failed} ${failed === 1 ? 'photo' : 'photos'}.`)
     }
     e.target.value = ''
   }, [])
 
   const handleToggle = useCallback((id) => {
-    // Tasks are only interactive once the user has tapped Ready. Without
-    // this guard a user could pre-complete every task in setup mode and
-    // then trigger an instant 0:00 victory by tapping Ready.
+    // Tasks are only interactive once the user has tapped Ready, so a child
+    // can't pre-complete everything and trigger an instant 0:00 victory.
     if (mode !== 'cleanup') return
     setTasks(prev =>
       prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     )
   }, [mode])
+
+  const handleDelete = useCallback((id) => {
+    setTasks(prev => prev.filter(t => t.id !== id))
+  }, [])
 
   const handleReady = useCallback(() => {
     setStartTime(Date.now())
@@ -159,11 +194,13 @@ export default function App() {
   const handleReset = useCallback(() => {
     clearInterval(timerRef.current)
     clearTimeout(completionTimeoutRef.current)
+    quotaWarnedRef.current = false
     setTasks([])
     setStartTime(null)
     setEndTime(null)
     setElapsed(0)
     setMode('setup')
+    setNotice(null)
     localStorage.removeItem(STORAGE_KEY)
   }, [])
 
@@ -181,6 +218,10 @@ export default function App() {
         )}
       </header>
 
+      {notice && (
+        <div className="notice" role="status" aria-live="polite">{notice}</div>
+      )}
+
       <main className="task-area">
         {tasks.length === 0 ? (
           <div className="empty-state">
@@ -195,6 +236,9 @@ export default function App() {
                 key={task.id}
                 task={task}
                 onToggle={handleToggle}
+                // Only pass onDelete in setup mode — the delete button
+                // hides itself when this prop is undefined.
+                onDelete={mode === 'setup' ? handleDelete : undefined}
                 interactive={mode === 'cleanup'}
               />
             ))}
