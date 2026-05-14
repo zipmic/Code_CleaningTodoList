@@ -74,15 +74,17 @@ function loadInitialState() {
   let mode = progress.mode || 'setup'
   let startTime = progress.startTime ?? null
   let endTime = progress.endTime ?? null
+  let pausedAt = progress.pausedAt ?? null
 
   // H2: empty grid + non-setup mode is a dead-end — no Ready, no Reset.
   if (tasks.length === 0 && mode !== 'setup') {
     mode = 'setup'
     startTime = null
     endTime = null
+    pausedAt = null
   }
 
-  return { tasks, mode, startTime, endTime }
+  return { tasks, mode, startTime, endTime, pausedAt }
 }
 
 // Returns 'ok' | 'lite' | 'fail'. Only called when the SET of task ids
@@ -126,6 +128,10 @@ export default function App() {
   const [mode, setMode] = useState(initial.mode)
   const [startTime, setStartTime] = useState(initial.startTime)
   const [endTime, setEndTime] = useState(initial.endTime)
+  // pausedAt: wall-clock timestamp when pause was pressed, or null if running.
+  // On resume, startTime is shifted forward by the pause duration so elapsed
+  // stays accurate without a separate "total paused ms" counter.
+  const [pausedAt, setPausedAt] = useState(initial.pausedAt)
   const [elapsed, setElapsed] = useState(0)
   const [notice, setNotice] = useState(null)
 
@@ -158,8 +164,8 @@ export default function App() {
   // Light save: every state change, but only ids + flags (< 1 KB).
   useEffect(() => {
     const completedIds = tasks.filter(t => t.completed).map(t => t.id)
-    saveProgress({ mode, startTime, endTime, completedIds })
-  }, [tasks, mode, startTime, endTime])
+    saveProgress({ mode, startTime, endTime, pausedAt, completedIds })
+  }, [tasks, mode, startTime, endTime, pausedAt])
 
   // Auto-dismiss any notice after a few seconds.
   useEffect(() => {
@@ -182,19 +188,21 @@ export default function App() {
 
   // Elapsed comes from wall-clock timestamps, so it doesn't drift on
   // throttled tabs and survives a refresh. 1 Hz tick is enough for a
-  // seconds display.
+  // seconds display. When paused, `pausedAt` acts as a frozen "now" so
+  // the number stops moving without any special-case rendering logic.
   useEffect(() => {
     if (!startTime) { setElapsed(0); return }
     const tick = () => {
-      const end = endTime ?? Date.now()
+      const end = endTime ?? pausedAt ?? Date.now()
       setElapsed(Math.max(0, Math.floor((end - startTime) / 1000)))
     }
     tick()
-    if (mode === 'cleanup') {
+    // Only tick while actively running (not paused, not complete).
+    if (mode === 'cleanup' && !pausedAt) {
       timerRef.current = setInterval(tick, 1000)
     }
     return () => clearInterval(timerRef.current)
-  }, [mode, startTime, endTime])
+  }, [mode, startTime, endTime, pausedAt])
 
   /* ── Auto-complete (M3 fix) ────────────────────────────────────────── */
 
@@ -291,8 +299,22 @@ export default function App() {
   const handleReady = useCallback(() => {
     setStartTime(Date.now())
     setEndTime(null)
+    setPausedAt(null)
     setMode('cleanup')
   }, [])
+
+  const handlePause = useCallback(() => {
+    clearInterval(timerRef.current)
+    setPausedAt(Date.now())
+  }, [])
+
+  // Shift startTime forward by however long the pause lasted, so elapsed
+  // continues from where it left off — including after a page refresh
+  // while paused (the gap since pausedAt was stored is silently skipped).
+  const handleResume = useCallback(() => {
+    setStartTime(prev => prev + (Date.now() - pausedAt))
+    setPausedAt(null)
+  }, [pausedAt])
 
   // Used both by the victory modal ("Start Over") and the in-cleanup
   // cancel button (M5).
@@ -302,6 +324,7 @@ export default function App() {
     completionTimeoutRef.current = null
     completingRef.current = false
     quotaWarnedRef.current = false
+    setPausedAt(null)
     // Intentionally NOT clearing lastSavedIdsRef — leaving it as the
     // pre-reset id list means the photo save effect will detect that
     // tasks dropped to [] and overwrite PHOTOS_KEY with an empty array.
@@ -384,7 +407,10 @@ export default function App() {
           mode={mode}
           elapsed={elapsed}
           taskCount={tasks.length}
+          paused={!!pausedAt}
           onReady={handleReady}
+          onPause={handlePause}
+          onResume={handleResume}
           onCancel={handleReset}
         />
       </div>
